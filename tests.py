@@ -23,14 +23,16 @@ pickle_path = os.path.join(os.path.realpath('..'), 'CFS/', 'pickles/')
 random_state = 420
 
 algos_tested = dict(pyscm=SetCoveringMachineClassifier(random_state=random_state),
-                    svm=SVC(class_weight='balanced', random_state=random_state),
+                    svm_lin=SVC(class_weight='balanced', random_state=random_state, kernel='linear'),
+                    svm_rbf=SVC(class_weight='balanced', random_state=random_state, kernel='rbf'),
                     decisionTree=DecisionTreeClassifier(class_weight='balanced', random_state=random_state),
-                    randomForest=RandomForestClassifier(class_weight='balanced', random_state=random_state))
+                    randomForest=RandomForestClassifier(n_estimators=1000, class_weight='balanced', random_state=random_state))
 
-params = dict(pyscm=dict(p=[0.5, 1., 2., 5., 10.], model_type=['disjunction', 'conjunction'], max_rules=[1, 2, 3, 4, 5]),
-              svm=dict(C=[0.5, 1., 2., 3., 5.], kernel=['linear', 'poly', 'rbf', 'sigmoid']),
-              decisionTree=dict(max_depth=[2, 3, 5, 10], min_samples_split=[2, 4, 6, 8]),
-              randomForest=dict(n_estimators=[5, 10, 25, 50, 100], max_depth=[2, 3, 5, 10], min_samples_split=[2, 4, 6]))
+params = dict(pyscm=dict(p=[0.1, 0.5, 1., 2., 5., 10.], model_type=['disjunction', 'conjunction'], max_rules=[1, 2, 3, 4, 5]),
+              svm_lin=dict(C=np.logspace(-2, 2, 20)),
+              svm_rbf=dict(C=np.logspace(-2, 2, 20), gamma=np.logspace(-2, 2, 20)),
+              decisionTree=dict(max_depth=[2, 3, 5, 10], min_samples_split=[4, 6, 8]),
+              randomForest=dict(max_depth=[2, 3, 5, 10], min_samples_split=[4, 6, 8]))
 
 def wa(y_true, y_pred, weights):
     w_y = np.asarray(y_true, dtype='float64')
