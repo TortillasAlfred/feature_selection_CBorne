@@ -8,3 +8,7 @@
 # Data folder #
 ###############
 pickles/
+
+# PyCharm #
+###########
+.idea/
