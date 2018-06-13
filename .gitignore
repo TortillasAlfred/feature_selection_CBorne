@@ -1,0 +1,10 @@
+# Compiled source #
+###################
+*.pck
+*.npy
+*.cvs
+*.pyc
+
+# Data folder #
+###############
+pickles/
