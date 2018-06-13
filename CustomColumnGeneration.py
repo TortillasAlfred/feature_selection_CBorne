@@ -17,7 +17,7 @@ from graalpy.results_dataframe import ResultsDataFrame
 from graalpy.metrics import zero_one_loss, zero_one_loss_per_example
 from graalpy.utils.misc import sign
 
-pickle_path = "/home/mathieu/Documents/BreastCancer_Mazid/tests/cqBoost_FS/pickle/"
+from tests import pickle_path
 
 class ColumnGenerationClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, epsilon=1e-06, n_max_iterations=None, estimators_generator=None, dual_constraint_rhs=0, save_iteration_as_hyperparameter_each=None,
@@ -39,7 +39,7 @@ class ColumnGenerationClassifier(BaseEstimator, ClassifierMixin):
 
         # Hack CFS
         if from_pickle:
-            self.estimators_generator.estimators_ = np.load(open(pickle_path + "estimators.pck", 'rb'))
+            self.estimators_generator.estimators_ = np.load(pickle_path + "estimators")
         else :
             self.estimators_generator.fit(X, y, classes_weights=self.classes_weights)
 

@@ -8,7 +8,7 @@ from joblib import Parallel, delayed
 
 import os
 
-pickle_path = os.path.join(os.path.realpath('..'), 'pickles/')
+from tests import pickle_path
 
 class CustomStumpsClassifiersGenerator(ClassifiersGenerator):
     """Decision Stump Voters transformer.
@@ -49,7 +49,7 @@ class CustomStumpsClassifiersGenerator(ClassifiersGenerator):
 
         self.estimators_ = np.asarray([liste[i][0] for i in np.arange(len(liste)) if liste[i][1] > 0.])
 
-        np.save(open(pickle_path + "estimators.pck", 'wb'), self.estimators_)
+        np.save(pickle_path + "estimators", self.estimators_)
 
         return self
 
@@ -69,7 +69,7 @@ def get_best_votant_feature(X_i, y, sorted_args_i, i):
         return [0., -1]
 
     X_i_stumps = (X_i_unique[:-1] + X_i_unique[1:]) * 0.5
-    arrays = np.asarray(map(lambda stump: (X_i_sorted - stump), X_i_stumps))
+    arrays = np.asarray([X_i_sorted - stump for stump in X_i_stumps])
     votants_i_neg_first = np.sign(np.vstack(arrays))
     votants_i_pos_first = -votants_i_neg_first
     votants = np.concatenate((votants_i_pos_first, votants_i_neg_first), axis=0)
