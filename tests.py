@@ -9,12 +9,13 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, accuracy_score, make_scorer
 from sklearn.utils import shuffle
+import numpy as np
 
 from CustomCqBoost import CqBoostClassifier
 
 from StumpsGenerator import CustomStumpsClassifiersGenerator
 
-import numpy as np
+import argparse
 
 import pickle
 import os
@@ -45,13 +46,12 @@ def wa(y_true, y_pred, weights):
     return correct[correct > 0].sum()/correct.shape[0]
 
 
-def get_classifier_scores(X, y, sample_weights):
-    random_states = [1, 42, 69, 420, 666, 33, 17, 6, 0, 51],
+def get_classifier_scores(X_train, X_test, y_train, y_test):
     f1_scores_mean = {}
     f1_scores_var = {}
     accuracies_mean = {}
     accuracies_var = {}
-    weight_dict = determiner_poids_classes(y, return_dict=True)
+    # weight_dict = determiner_poids_classes(y_train, return_dict=True)
 
     for algo in algos_tested:
         f1_scores_mean_algo = []
@@ -61,19 +61,20 @@ def get_classifier_scores(X, y, sample_weights):
 
         print("Begin " + str(algo))
 
-        for x in X:
+        for i in range(len(X_train)):
+            x_train = X_train[i].copy()
+            x_test = X_test[i].copy()
             f1_temp, accuracies_temp = [], []
-            for rs in random_states:
-                learner = algos_tested[algo]
-                x_train, x_test, y_train, y_test, _, sample_weights_test = train_test_split(x, y, sample_weights, train_size=0.7, random_state=rs)
-                cv_params = params[algo]
-                scorer = make_scorer(wa, weights=weight_dict)
-                # Cross validation avec weighted accuracy
-                clf = GridSearchCV(learner, cv_params, verbose=1, n_jobs=-1, scoring=scorer, cv=5)
-                clf.fit(x_train, y_train)
-                y_pred = clf.predict(x_test)
-                f1_temp.append(f1_score(y_test, y_pred))
-                accuracies_temp.append(accuracy_score(y_test, y_pred, sample_weight=sample_weights_test))
+            learner = algos_tested[algo]
+            cv_params = params[algo]
+            # scorer = make_scorer(wa, weights=weight_dict)
+            # Cross validation avec weighted accuracy
+            clf = GridSearchCV(learner, cv_params, verbose=1, n_jobs=-1, cv=5)
+            clf.fit(x_train, y_train)
+            y_pred = clf.predict(x_test)
+            f1_temp.append(f1_score(y_test, y_pred))
+            # accuracies_temp.append(wa(y_test, y_pred, weights=weight_dict))
+            accuracies_temp.append(accuracy_score(y_test, y_pred))
 
             f1_temp = np.asarray(f1_temp)
             f1_scores_mean_algo.append(np.mean(f1_temp, dtype=np.float64))
@@ -111,16 +112,48 @@ def calculer_similarites_features():
 
     return percent_identical_features
 
+def make_save_split(X, y, random_state):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=random_state)
+
+    np.save(pickle_path + "X_train", X_train)
+    np.save(pickle_path + "X_test", X_test)
+    np.save(pickle_path + "y_train", y_train)
+    np.save(pickle_path + "y_test", y_test)
+
+
+def run_tests_random_state(rs):
+    global pickle_path
+    X = np.load(pickle_path + "X_balanced.npy")
+    y = np.load(pickle_path + "y_balanced.npy")
+
+    pickle_path += str(rs) + '/'
+
+    if not os.path.exists(pickle_path):
+        os.mkdir(pickle_path)
+
+    make_save_split(X, y, rs)
+
+    choisir_features_CFS()
+
+    choisir_features_RFE()
+
+    generer_sous_ensembles_X_from_features_retained()
+
+    run_tests_comparison()
+
+    see_tests_results()
+
 
 def run_tests_comparison():
-    _, y = load_data()
-    class_weights = determiner_poids_classes(y)
+    _, y_train, _, y_test = load_data()
+    # class_weights = determiner_poids_classes(y)
 
     sizes = calculer_sizes()
 
-    X_RFE = [np.load(pickle_path + "X_" + str(n) + "_RFE.npy") for n in sizes]
+    X_RFE_train = [np.load(pickle_path + "X_" + str(n) + "_train_RFE.npy") for n in sizes]
+    X_RFE_test = [np.load(pickle_path + "X_" + str(n) + "_test_RFE.npy") for n in sizes]
 
-    covariance_RFE = np.asarray([np.tril(np.corrcoef(x, rowvar=False), k=-1) for x in X_RFE[1:]])
+    covariance_RFE = np.asarray([np.tril(np.corrcoef(x, rowvar=False), k=-1) for x in X_RFE_train[1:]])
 
     covariance_RFE_abs = np.absolute(covariance_RFE)
 
@@ -128,13 +161,14 @@ def run_tests_comparison():
 
     cov_RFE_abs = np.asarray([np.sum(cov)/(len(cov) * (len(cov) - 1)) * 2. for cov in covariance_RFE_abs])
 
-    f1_scores_mean_RFE, f1_scores_var_RFE, accuracies_mean_RFE, accuracies_var_RFE = get_classifier_scores(X_RFE, y, sample_weights=class_weights)
+    f1_scores_mean_RFE, f1_scores_var_RFE, accuracies_mean_RFE, accuracies_var_RFE = get_classifier_scores(X_RFE_train, X_RFE_test, y_train, y_test)
 
     print("Done tests RFE")
 
-    X_CqBoost = [np.load(pickle_path + "X_" + str(n) + "_CqBoost.npy") for n in sizes]
+    X_CqBoost_train = [np.load(pickle_path + "X_" + str(n) + "_train_CqBoost.npy") for n in sizes]
+    X_CqBoost_test = [np.load(pickle_path + "X_" + str(n) + "_test_CqBoost.npy") for n in sizes]
 
-    covariance_CqBoost = np.asarray([np.tril(np.corrcoef(x, rowvar=False), k=-1) for x in X_CqBoost[1:]])
+    covariance_CqBoost = np.asarray([np.tril(np.corrcoef(x, rowvar=False), k=-1) for x in X_CqBoost_train[1:]])
 
     covariance_CqBoost_abs = np.absolute(covariance_CqBoost)
 
@@ -142,7 +176,7 @@ def run_tests_comparison():
 
     cov_CqBoost_abs = np.asarray([np.sum(cov) / (len(cov) * (len(cov) - 1)) * 2. for cov in covariance_CqBoost_abs])
 
-    f1_scores_mean_CqBoost, f1_scores_var_CqBoost, accuracies_mean_CqBoost, accuracies_var_CqBoost = get_classifier_scores(X_CqBoost, y, sample_weights=class_weights)
+    f1_scores_mean_CqBoost, f1_scores_var_CqBoost, accuracies_mean_CqBoost, accuracies_var_CqBoost = get_classifier_scores(X_CqBoost_train, X_CqBoost_test, y_train, y_test)
 
     percent_same_features = calculer_similarites_features()
 
@@ -191,23 +225,25 @@ def determiner_poids_classes(y, return_dict=False):
     w_neg = n_samples/(2. * n_neg)
     w_pos = n_samples/(2. * n_pos)
     if return_dict:
-        return {-1:w_neg, 1:w_pos}
+        return {-1: w_neg, 1: w_pos}
     else:
         return np.asarray([w_neg if i == -1 else w_pos for i in y])
 
 
 def load_data():
-    X = np.load(pickle_path + 'X.npy')
-    y = np.load(pickle_path + 'y.npy')
-    return X, y
+    X_train = np.load(pickle_path + 'X_train.npy')
+    X_test = np.load(pickle_path + 'X_test.npy')
+    y_train = np.load(pickle_path + 'y_train.npy')
+    y_test = np.load(pickle_path + 'y_test.npy')
+    return X_train, y_train, X_test, y_test
 
 
 def choisir_features_CFS():
-    X, y = load_data()
+    X, y, _, _ = load_data()
     print("Début Prudi Prudi")
-    estimators_generator = CustomStumpsClassifiersGenerator()
-    weight_vector = determiner_poids_classes(y)
-    learner = CqBoostClassifier(estimators_generator=estimators_generator, classes_weights=weight_vector, n_max_iterations=4096)
+    estimators_generator = CustomStumpsClassifiersGenerator(pickle_path)
+    # weight_vector = determiner_poids_classes(y)
+    learner = CqBoostClassifier(estimators_generator=estimators_generator, n_max_iterations=4096)
     learner.fit(X, y, from_pickle=False)
     print("Fin Prudi Prudi")
 
@@ -217,29 +253,30 @@ def choisir_features_CFS():
 
 
 def choisir_5000_features_RFE():
-    X, y = load_data()
+    X_train, y_train, X_test, _ = load_data()
     print("Début RFE 5000")
     estimator = SVC(kernel='linear', class_weight='balanced')
     selector = RFE(estimator, n_features_to_select=5000, step=0.01, verbose=1)
-    selector.fit(X, y)
+    selector.fit(X_train, y_train)
     print("Fin RFE 5000")
     retained_scores_RFE = selector.ranking_
     retained_features_RFE_5000 = np.where(retained_scores_RFE == 1)[0]
 
     np.save(pickle_path + "retained_features_RFE_5000", retained_features_RFE_5000)
 
-    X_5000_RFE = X[:, retained_features_RFE_5000]
-
-    np.save(pickle_path + "X_RFE_5000", X_5000_RFE)
+    X_5000_train_RFE = X_train[:, retained_features_RFE_5000]
+    np.save(pickle_path + "X_train_RFE_5000", X_5000_train_RFE)
+    X_5000_test_RFE = X_test[:, retained_features_RFE_5000]
+    np.save(pickle_path + "X_test_RFE_5000", X_5000_test_RFE)
 
 
 def choisir_derniers_features_RFE():
-    _, y = load_data()
-    X_5000_RFE = np.load(pickle_path + "X_RFE_5000.npy")
+    _, y_train, X_test, _ = load_data()
+    X_5000_train_RFE = np.load(pickle_path + "X_train_RFE_5000.npy")
     print("Début RFE")
     estimator = SVC(kernel='linear', class_weight='balanced')
     selector = RFE(estimator, n_features_to_select=2, step=1)
-    selector.fit(X_5000_RFE, y)
+    selector.fit(X_5000_train_RFE, y_train)
     print("Fin RFE")
     retained_scores_RFE = selector.ranking_
 
@@ -262,7 +299,6 @@ def calculer_sizes():
     retained_features_CqBoost = np.load(pickle_path + "retained_features_CqBoost.npy")
 
     sizes = [2 ** i for i in range(10000) if 2 ** i < len(retained_features_CqBoost)]
-    sizes.append(len(retained_features_CqBoost))
 
     return sizes
 
@@ -272,9 +308,10 @@ def generer_sous_ensembles_X_from_features_retained():
 
     retained_features_CqBoost = np.load(pickle_path + "retained_features_CqBoost.npy")
 
-    X, _ = load_data()
+    X_train, _, X_test, _ = load_data()
 
-    X_5000_RFE = np.load(pickle_path + "X_RFE_5000.npy")
+    X_5000_train_RFE = np.load(pickle_path + "X_train_RFE_5000.npy")
+    X_5000_test_RFE = np.load(pickle_path + "X_test_RFE_5000.npy")
 
     retained_features_RFE_5000 = np.load(pickle_path + "retained_features_RFE_5000.npy")
 
@@ -284,11 +321,13 @@ def generer_sous_ensembles_X_from_features_retained():
 
     for s in sizes:
         retained_features_CqBoost_sizes.append(retained_features_CqBoost[:s])
-        np.save(pickle_path + "X_" + str(s) + "_CqBoost", X[:, retained_features_CqBoost[:s]])
+        np.save(pickle_path + "X_" + str(s) + "_train_CqBoost", X_train[:, retained_features_CqBoost[:s]])
+        np.save(pickle_path + "X_" + str(s) + "_test_CqBoost", X_test[:, retained_features_CqBoost[:s]])
 
     for s in sizes:
         retained_features_RFE_sizes.append(retained_features_RFE_5000[retained_features_RFE[:s]])
-        np.save(pickle_path + "X_" + str(s) + "_RFE", X_5000_RFE[:, retained_features_RFE[:s]])
+        np.save(pickle_path + "X_" + str(s) + "_train_RFE", X_5000_train_RFE[:, retained_features_RFE[:s]])
+        np.save(pickle_path + "X_" + str(s) + "_test_RFE", X_5000_test_RFE[:, retained_features_RFE[:s]])
 
     print("done sous-ensembles")
 
@@ -398,21 +437,15 @@ def make_undersampled_balanced_dataset(random_state):
     np.save(pickle_path + "y_balanced", y_balanced)
 
 
-def main_execution():
-    make_undersampled_balanced_dataset(random_state)
-
-    choisir_features_CFS()
-
-    choisir_features_RFE()
-
-    generer_sous_ensembles_X_from_features_retained()
-
-    run_tests_comparison()
-
-    see_tests_results()
+def main_execution(rs):
+    run_tests_random_state(rs)
 
     print("Done")
 
 
 if __name__ == '__main__':
-    main_execution()
+    parser = argparse.ArgumentParser(description='Select the random state desired from the train-test split')
+    parser.add_argument('rs', type=int, nargs='?', default=420)
+
+    args = parser.parse_args()
+    main_execution(args.rs)

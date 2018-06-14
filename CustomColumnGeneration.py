@@ -17,7 +17,9 @@ from graalpy.results_dataframe import ResultsDataFrame
 from graalpy.metrics import zero_one_loss, zero_one_loss_per_example
 from graalpy.utils.misc import sign
 
-from tests import pickle_path
+import os
+
+pickle_path = os.path.join(os.path.realpath('..'), 'CFS/', 'pickles/')
 
 class ColumnGenerationClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, epsilon=1e-06, n_max_iterations=None, estimators_generator=None, dual_constraint_rhs=0, save_iteration_as_hyperparameter_each=None,
