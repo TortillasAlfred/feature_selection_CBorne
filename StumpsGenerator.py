@@ -8,8 +8,6 @@ from joblib import Parallel, delayed
 
 import os
 
-pickle_path = os.path.join(os.path.realpath('..'), 'pickles/')
-
 class CustomStumpsClassifiersGenerator(ClassifiersGenerator):
     """Decision Stump Voters transformer.
 
@@ -22,8 +20,9 @@ class CustomStumpsClassifiersGenerator(ClassifiersGenerator):
         Whether or not a binary complement voter must be generated for each voter. Defaults to False.
 
     """
-    def __init__(self):
+    def __init__(self, pickle_path):
         super(CustomStumpsClassifiersGenerator, self).__init__()
+        self.pickle_path = pickle_path
 
     def fit(self, X, y, classes_weights=None, n_jobs=-1):
         """Fits Decision Stump voters on a training set.
@@ -42,14 +41,14 @@ class CustomStumpsClassifiersGenerator(ClassifiersGenerator):
         """
         X_args_sorted = np.argsort(X, axis=0)
 
-        if classes_weights is not None:
-            y = np.multiply(y, classes_weights)
+        # if classes_weights is not None:
+        #     y = np.multiply(y, classes_weights)
 
         liste = Parallel(n_jobs=n_jobs)(delayed(get_best_votant_feature)(X[:, i], y, X_args_sorted[:, i], i) for i in np.arange(X.shape[1]))
 
         self.estimators_ = np.asarray([liste[i][0] for i in np.arange(len(liste)) if liste[i][1] > 0.])
 
-        np.save(open(pickle_path + "estimators.pck", 'wb'), self.estimators_)
+        np.save(self.pickle_path + "estimators", self.estimators_)
 
         return self
 
@@ -69,7 +68,7 @@ def get_best_votant_feature(X_i, y, sorted_args_i, i):
         return [0., -1]
 
     X_i_stumps = (X_i_unique[:-1] + X_i_unique[1:]) * 0.5
-    arrays = np.asarray(map(lambda stump: (X_i_sorted - stump), X_i_stumps))
+    arrays = np.asarray([X_i_sorted - stump for stump in X_i_stumps])
     votants_i_neg_first = np.sign(np.vstack(arrays))
     votants_i_pos_first = -votants_i_neg_first
     votants = np.concatenate((votants_i_pos_first, votants_i_neg_first), axis=0)
@@ -92,6 +91,6 @@ def get_best_votant_feature(X_i, y, sorted_args_i, i):
 
     acc = accuracy[best_votant_idx]
 
-    print str(i) + " : " + str(acc)
+    print(str(i) + " : " + str(acc))
 
     return [votant, acc]

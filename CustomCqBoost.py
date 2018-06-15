@@ -34,7 +34,7 @@ class CqBoostClassifier(ColumnGenerationClassifier):
 
         # Hack CFS (version 3), ajouter les poids des classes dans qp_g
         qp_g = np.vstack((np.hstack((-np.eye(n_hypotheses), np.zeros((n_hypotheses, n_examples)))),
-                          np.hstack((np.zeros((1, n_hypotheses)), - 1.0 / n_examples * m_ones.T * self.classes_weights))))
+                          np.hstack((np.zeros((1, n_hypotheses)), - 1.0 / n_examples * m_ones.T))))
 
         qp_h = np.vstack((np.zeros((n_hypotheses, 1)),
                           np.array([-self.mu]).reshape((1, 1))))
