@@ -19,7 +19,6 @@ import argparse
 
 import pickle
 import os
-import csv
 
 pickle_path = os.path.join(os.path.realpath('..'), 'CFS/', 'pickles/')
 
@@ -38,6 +37,9 @@ params = dict(pyscm=dict(p=[0.1, 0.5, 1., 2., 5., 10.], model_type=['disjunction
               randomForest=dict(max_depth=[2, 3, 5, 10], min_samples_split=[4, 6, 8]))
 
 
+def get_random_states():
+    return [1, 7, 18, 22, 33, 42, 69, 100, 420, 666]
+
 def wa(y_true, y_pred, weights):
     w_y = np.asarray(y_true, dtype='float64')
     for k in weights.keys():
@@ -47,24 +49,16 @@ def wa(y_true, y_pred, weights):
 
 
 def get_classifier_scores(X_train, X_test, y_train, y_test):
-    f1_scores_mean = {}
-    f1_scores_var = {}
-    accuracies_mean = {}
-    accuracies_var = {}
+    f1_scores = {}
+    accuracies = {}
     # weight_dict = determiner_poids_classes(y_train, return_dict=True)
 
     for algo in algos_tested:
-        f1_scores_mean_algo = []
-        f1_scores_var_algo = []
-        accuracies_mean_algo = []
-        accuracies_var_algo = []
-
         print("Begin " + str(algo))
 
         for i in range(len(X_train)):
             x_train = X_train[i].copy()
             x_test = X_test[i].copy()
-            f1_temp, accuracies_temp = [], []
             learner = algos_tested[algo]
             cv_params = params[algo]
             # scorer = make_scorer(wa, weights=weight_dict)
@@ -72,23 +66,14 @@ def get_classifier_scores(X_train, X_test, y_train, y_test):
             clf = GridSearchCV(learner, cv_params, verbose=1, n_jobs=-1, cv=5)
             clf.fit(x_train, y_train)
             y_pred = clf.predict(x_test)
-            f1_temp.append(f1_score(y_test, y_pred))
+            f1_score_algo = f1_score(y_test, y_pred)
             # accuracies_temp.append(wa(y_test, y_pred, weights=weight_dict))
-            accuracies_temp.append(accuracy_score(y_test, y_pred))
+            accuracy_algo = accuracy_score(y_test, y_pred)
 
-            f1_temp = np.asarray(f1_temp)
-            f1_scores_mean_algo.append(np.mean(f1_temp, dtype=np.float64))
-            f1_scores_var_algo.append(np.var(f1_temp, dtype=np.float64))
-            accuracies_temp = np.asarray(accuracies_temp)
-            accuracies_mean_algo.append(np.mean(accuracies_temp, dtype=np.float64))
-            accuracies_var_algo.append(np.var(accuracies_temp, dtype=np.float64))
+        f1_scores[algo] = f1_score_algo
+        accuracies[algo] = accuracy_algo
 
-        f1_scores_mean[algo] = f1_scores_mean_algo
-        f1_scores_var[algo] = f1_scores_var_algo
-        accuracies_mean[algo] = accuracies_mean_algo
-        accuracies_var[algo] = accuracies_var_algo
-
-    return f1_scores_mean, f1_scores_var, accuracies_mean, accuracies_var
+    return f1_scores, accuracies
 
 
 def calculer_similarites_features():
@@ -121,10 +106,12 @@ def make_save_split(X, y, random_state):
     np.save(pickle_path + "y_test", y_test)
 
 
-def run_tests_random_state(rs):
+def run_tests_random_state(n):
     global pickle_path
     X = np.load(pickle_path + "X_balanced.npy")
     y = np.load(pickle_path + "y_balanced.npy")
+
+    rs = get_random_states()[n]
 
     pickle_path += str(rs) + '/'
 
@@ -140,8 +127,6 @@ def run_tests_random_state(rs):
     generer_sous_ensembles_X_from_features_retained()
 
     run_tests_comparison()
-
-    see_tests_results()
 
 
 def run_tests_comparison():
@@ -161,7 +146,7 @@ def run_tests_comparison():
 
     cov_RFE_abs = np.asarray([np.sum(cov)/(len(cov) * (len(cov) - 1)) * 2. for cov in covariance_RFE_abs])
 
-    f1_scores_mean_RFE, f1_scores_var_RFE, accuracies_mean_RFE, accuracies_var_RFE = get_classifier_scores(X_RFE_train, X_RFE_test, y_train, y_test)
+    f1_scores_mean_RFE, accuracies_mean_RFE= get_classifier_scores(X_RFE_train, X_RFE_test, y_train, y_test)
 
     print("Done tests RFE")
 
@@ -176,7 +161,7 @@ def run_tests_comparison():
 
     cov_CqBoost_abs = np.asarray([np.sum(cov) / (len(cov) * (len(cov) - 1)) * 2. for cov in covariance_CqBoost_abs])
 
-    f1_scores_mean_CqBoost, f1_scores_var_CqBoost, accuracies_mean_CqBoost, accuracies_var_CqBoost = get_classifier_scores(X_CqBoost_train, X_CqBoost_test, y_train, y_test)
+    f1_scores_mean_CqBoost, accuracies_mean_CqBoost = get_classifier_scores(X_CqBoost_train, X_CqBoost_test, y_train, y_test)
 
     percent_same_features = calculer_similarites_features()
 
@@ -188,23 +173,11 @@ def run_tests_comparison():
     with open(pickle_path + "f1_scores_mean_CqBoost.pck", 'wb') as f:
         pickle.dump(f1_scores_mean_CqBoost, f)
 
-    with open(pickle_path + "f1_scores_var_RFE.pck", 'wb') as f:
-        pickle.dump(f1_scores_var_RFE, f)
-
-    with open(pickle_path + "f1_scores_var_CqBoost.pck", 'wb') as f:
-        pickle.dump(f1_scores_var_CqBoost, f)
-
     with open(pickle_path + "accuracies_mean_RFE.pck", 'wb') as f:
         pickle.dump(accuracies_mean_RFE, f)
 
     with open(pickle_path + "accuracies_mean_CqBoost.pck", 'wb') as f:
         pickle.dump(accuracies_mean_CqBoost, f)
-
-    with open(pickle_path + "accuracies_var_RFE.pck", 'wb') as f:
-        pickle.dump(accuracies_var_RFE, f)
-
-    with open(pickle_path + "accuracies_var_CqBoost.pck", 'wb') as f:
-        pickle.dump(accuracies_var_CqBoost, f)
 
     with open(pickle_path + "percent_same_features.pck", 'wb') as f:
         pickle.dump(percent_same_features, f)
@@ -214,6 +187,8 @@ def run_tests_comparison():
 
     np.save(pickle_path + "cov_CqBoost", cov_CqBoost)
     np.save(pickle_path + "cov_CqBoost_abs", cov_CqBoost_abs)
+
+    np.save(pickle_path + "sizes", sizes)
 
     print("Done tests comparison")
 
@@ -332,86 +307,6 @@ def generer_sous_ensembles_X_from_features_retained():
     print("done sous-ensembles")
 
 
-def see_tests_results():
-    f1_scores_mean_RFE = {}
-    with open(pickle_path + "f1_scores_mean_RFE.pck", 'rb') as f:
-        f1_scores_mean_RFE = pickle.load(f)
-
-    f1_scores_mean_CqBoost = {}
-    with open(pickle_path + "f1_scores_mean_CqBoost.pck", 'rb') as f:
-        f1_scores_mean_CqBoost = pickle.load(f)
-
-    f1_scores_var_RFE = {}
-    with open(pickle_path + "f1_scores_var_RFE.pck", 'rb') as f:
-        f1_scores_var_RFE = pickle.load(f)
-
-    f1_scores_var_CqBoost = {}
-    with open(pickle_path + "f1_scores_var_CqBoost.pck", 'rb') as f:
-        f1_scores_var_CqBoost = pickle.load(f)
-
-    accuracies_mean_RFE = {}
-    with open(pickle_path + "accuracies_mean_RFE.pck", 'rb') as f:
-        accuracies_mean_RFE = pickle.load(f)
-
-    accuracies_mean_CqBoost = {}
-    with open(pickle_path + "accuracies_mean_CqBoost.pck", 'rb') as f:
-        accuracies_mean_CqBoost = pickle.load(f)
-
-    accuracies_var_RFE = {}
-    with open(pickle_path + "accuracies_var_RFE.pck", 'rb') as f:
-        accuracies_var_RFE = pickle.load(f)
-
-    accuracies_var_CqBoost = {}
-    with open(pickle_path + "accuracies_var_CqBoost.pck", 'rb') as f:
-        accuracies_var_CqBoost = pickle.load(f)
-
-    percent_same_features = {}
-    with open(pickle_path + "percent_same_features.pck", 'rb') as f:
-        percent_same_features = pickle.load(f)
-
-    cov_RFE = np.load(pickle_path + "cov_RFE.npy")
-    cov_RFE_abs = np.load(pickle_path + "cov_RFE_abs.npy")
-
-    cov_CqBoost = np.load(pickle_path + "cov_CqBoost.npy")
-    cov_CqBoost_abs = np.load(pickle_path + "cov_CqBoost_abs.npy")
-
-    sizes = calculer_sizes()
-
-    metriques_dict = {}
-    tests_dict = {}
-    tests_dict["sizes"] = sizes
-    tests_dict["percent_same_features"] = percent_same_features
-    tests_dict["cov_RFE"] = cov_RFE
-    tests_dict["cov_RFE_abs"] = cov_RFE_abs
-    tests_dict["cov_CqBoost"] = cov_CqBoost
-    tests_dict["cov_CqBoost_abs"] = cov_CqBoost_abs
-    metriques_dict["accuracies_mean_CqBoost"] = accuracies_mean_CqBoost
-    metriques_dict["accuracies_var_CqBoost"] = accuracies_var_CqBoost
-    metriques_dict["accuracies_mean_RFE"] = accuracies_mean_RFE
-    metriques_dict["accuracies_var_RFE"] = accuracies_var_RFE
-    metriques_dict["f1_scores_mean_CqBoost"] = f1_scores_mean_CqBoost
-    metriques_dict["f1_scores_var_CqBoost"] = f1_scores_var_CqBoost
-    metriques_dict["f1_scores_mean_RFE"] = f1_scores_mean_RFE
-    metriques_dict["f1_scores_var_RFE"] = f1_scores_var_RFE
-
-
-    with open(pickle_path + 'test_results.csv', 'w') as f:
-        writer = csv.writer(f)
-        for k, value in tests_dict.items():
-            writer.writerow([k])
-            for v in value:
-                writer.writerow([v])
-
-        for algo in algos_tested:
-            writer.writerow([algo])
-            writer.writerow([k for k in metriques_dict.keys()])
-            vals = [d[algo] for d in metriques_dict.values()]
-            for i in range(len(vals[0])):
-                writer.writerow([v[i] for v in vals])
-
-    print("Mets un breakpoint ici si tu veux voir les dictionnaires mon chum")
-
-
 def make_undersampled_balanced_dataset(random_state):
     X, y = load_data()
 
@@ -437,15 +332,22 @@ def make_undersampled_balanced_dataset(random_state):
     np.save(pickle_path + "y_balanced", y_balanced)
 
 
-def main_execution(rs):
-    run_tests_random_state(rs)
+def main_execution(n):
+    run_tests_random_state(n)
 
     print("Done")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Select the random state desired from the train-test split')
-    parser.add_argument('rs', type=int, nargs='?', default=420)
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--n', default=0, type=int, nargs='?', help='Index of the desired rs in the rs list.')
+    parser.add_argument('--rs', default=[42], type=int, nargs='?', help='The random states list (rs)')
+    parser.add_argument('--dataset', default='movielens', type=str, help='The name of the dataset for the experiments')
+    parser.add_argument('--outdir', default='results/test', type=str,
+                        help='The name of the output directory for the experiments')
+    parser.add_argument('--algos',
+                        default=['hyperkrr'],  # ['fskrr', 'metakrr', 'multitask', 'snail', 'mann', 'maml'],
+                        type=str, nargs='+',
+                        help='The name of the algos: fskrr|metakrr|multitask|snail|mann|maml')
     args = parser.parse_args()
-    main_execution(args.rs)
+    main_execution(args.n)
